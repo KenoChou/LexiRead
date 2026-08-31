@@ -48,8 +48,13 @@ export function App() {
       return
     }
     if (extension === 'html' || extension === 'htm') content = new DOMParser().parseFromString(content, 'text/html').body.innerText
-    const book: Book = { id: crypto.randomUUID(), title: file.name.replace(/\.[^.]+$/, ''), author: 'Unknown author', format: extension === 'epub' ? 'epub' : extension === 'txt' ? 'txt' : 'html', content: content.trim() || demoText, createdAt: new Date().toISOString(), progress: 0 }
-    persist({ ...data, books: [book, ...data.books] }); openBook(book); event.target.value = ''
+    const book: Book = { id: crypto.randomUUID(), title: file.name.replace(/\.[^.]+$/, ''), author: 'Unknown author', format: extension === 'epub' ? 'epub' : extension === 'txt' ? 'txt' : 'html', content: content.trim() || demoText, createdAt: new Date().toISOString(), lastReadAt: new Date().toISOString(), progress: 0 }
+    // Do not call openBook here: it receives the previous render's `data` and would
+    // overwrite this freshly imported record before React has applied the state update.
+    persist({ ...data, books: [book, ...data.books] })
+    setActiveBookId(book.id)
+    setPage('reader')
+    event.target.value = ''
   }
   const addWord = () => {
     if (!selected || !activeBook) return
