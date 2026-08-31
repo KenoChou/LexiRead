@@ -1,5 +1,4 @@
 import { ChangeEvent, useMemo, useRef, useState } from 'react'
-import ePub from 'epubjs'
 import type { Book, Page, VocabularyItem, VocabularyStatus, WordDefinition } from './types'
 import { storage } from './services/storage'
 import { dictionaryService } from './services/dictionary'
@@ -26,19 +25,28 @@ export function App() {
     const extension = file.name.split('.').pop()?.toLowerCase();
     if (!['txt', 'html', 'htm', 'epub'].includes(extension ?? '')) return
     let content = ''
-    if (extension === 'epub') {
-      const epub = ePub(await file.arrayBuffer())
-      await epub.ready
-      const sections = epub.spine.spineItems
-      const chapterText = await Promise.all(sections.map(async (section) => {
-        const document = await section.load(epub.load.bind(epub))
-        const text = document.body?.textContent ?? ''
-        section.unload()
-        return text
-      }))
-      content = chapterText.join('\n\n')
-      epub.destroy()
-    } else content = await file.text()
+    try {
+      if (extension === 'epub') {
+        // EPUB parsing is loaded only when it is needed. A malformed EPUB must not
+        // prevent the rest of the local reading application from starting.
+        const { default: ePub } = await import('epubjs')
+        const epub = ePub(await file.arrayBuffer())
+        await epub.ready
+        const chapterText = await Promise.all(epub.spine.spineItems.map(async (section) => {
+          const chapterDocument = await section.load(epub.load.bind(epub))
+          const text = chapterDocument.body?.textContent ?? ''
+          section.unload()
+          return text
+        }))
+        content = chapterText.join('\n\n')
+        epub.destroy()
+      } else content = await file.text()
+    } catch (error) {
+      console.error('Unable to import book', error)
+      alert('This book could not be processed. Please try a valid, unprotected EPUB, TXT, or HTML file.')
+      event.target.value = ''
+      return
+    }
     if (extension === 'html' || extension === 'htm') content = new DOMParser().parseFromString(content, 'text/html').body.innerText
     const book: Book = { id: crypto.randomUUID(), title: file.name.replace(/\.[^.]+$/, ''), author: 'Unknown author', format: extension === 'epub' ? 'epub' : extension === 'txt' ? 'txt' : 'html', content: content.trim() || demoText, createdAt: new Date().toISOString(), progress: 0 }
     persist({ ...data, books: [book, ...data.books] }); openBook(book); event.target.value = ''
